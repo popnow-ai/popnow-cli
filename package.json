@@ -1,0 +1,66 @@
+{
+  "name": "@popnow/cli",
+  "version": "0.1.0",
+  "description": "Official command-line client for the PopNow API: generate AI video, images, music and speech from your terminal or CI.",
+  "type": "module",
+  "license": "MIT",
+  "author": "PopNow (https://popnow.ai)",
+  "homepage": "https://github.com/popnow-ai/popnow-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/popnow-ai/popnow-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/popnow-ai/popnow-cli/issues"
+  },
+  "keywords": [
+    "popnow",
+    "cli",
+    "ai-video",
+    "ai-video-generator",
+    "text-to-video",
+    "image-to-video",
+    "text-to-image",
+    "ai-image-generator",
+    "ai-music",
+    "text-to-speech",
+    "kling",
+    "seedance",
+    "wan",
+    "nano-banana",
+    "flux"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "bin": {
+    "popnow": "dist/cli/index.js"
+  },
+  "main": "./dist/cli/index.js",
+  "types": "./dist/cli/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

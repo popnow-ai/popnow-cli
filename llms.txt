@@ -1,0 +1,33 @@
+# popnow-cli
+
+> `popnow` (npm package `@popnow/cli`) is the official command-line client for the PopNow API (https://popnow.ai): generate AI video, images, music and speech from a terminal, shell script or CI with models such as Kling, Seedance, Wan, Vidu, MiniMax, Nano Banana, GPT Image, Flux and Suno. Node.js 22.12+, MIT licensed.
+
+## Install and authenticate
+
+- `npm install -g github:popnow-ai/popnow-cli` (or `npx github:popnow-ai/popnow-cli <command>`); an npm registry release is coming.
+- API key from https://popnow.ai/api/console/keys, read only from the `POPNOW_API_KEY` environment variable (never a CLI argument). Optional `POPNOW_BASE_URL` (default `https://api.popnow.ai`).
+
+## Commands
+
+- `popnow status` - checks `GET /healthz`; no key.
+- `popnow models list [--modality image|video|audio] [--provider] [--task] [--search] [--include-schema]`, `popnow models get <model>` - `GET /api/v1/models[/{model}]`.
+- `popnow balance` - `GET /api/v1/chat/credit` (credits; 1 credit = $0.01). `popnow usage [--from --to]` - `GET /api/v1/usage`.
+- `popnow jobs quote --model <id> --input-json '<json>'` - `POST /api/v1/jobs/quote`, nothing is held.
+- `popnow jobs create --model <id> --input-json|--input-file <...> [--callback-url] [--idempotency-key] [--retention 1h] [--yes] [--wait]` - quotes, shows the price, asks to confirm, then `POST /api/v1/jobs/createTask` with `quoteId`, `expectedCredits` and an automatic `Idempotency-Key`; `--wait` polls `GET /api/v1/jobs/recordInfo`.
+- `popnow jobs list|get|wait|retry|purge` - `GET /api/v1/jobs`, `recordInfo`, polling, `POST /api/v1/jobs/retry`, `POST /api/v1/jobs/purge`.
+- `popnow files upload <path>` - upload-url, presigned PUT, commit; prints a `popnow://f/...` URI. `popnow files download-url <task-id>`.
+- `popnow assets list|get|usage` - the private asset library (`popnow://a/...` URIs).
+- `popnow webhooks verify --body-file --timestamp --signature [--webhook-id]` - task callback or Standard Webhooks signature check; secret from `POPNOW_WEBHOOK_SECRET` / `POPNOW_ENDPOINT_SECRET`.
+- `popnow docs`, `popnow docs open <topic>`, `popnow docs search <words>`.
+- Global: `--json`, `--base-url`, `--timeout-ms`, `--max-retries`. Exit codes: 0 ok, 1 error, 2 waited task did not succeed.
+
+## Facts
+
+- Model IDs look like `<maker>/<model>/<task>`, e.g. `alibaba/z-image-turbo/text-to-image`, `alibaba/wan-3.0/image-to-video`.
+- Responses use the envelope `{code,msg,data,request_id}`; errors print a `Next:` hint per business code.
+- Task states: queued, running, succeeded, failed, expired. Failed tasks are refunded. Output links last about 20 minutes.
+
+## Links
+
+- Docs: https://popnow.ai/docs · OpenAPI: https://popnow.ai/docs/openapi.yaml · MCP: https://popnow.ai/mcp · https://popnow.ai/llms.txt
+- Repositories: https://github.com/popnow-ai (popnow-mcp, popnow-skills, popnow-python, popnow-js, popnow-api, popnow-blender, popnow-comfyui, n8n-nodes-popnow, popnow-go, popnow-php)
