@@ -31,15 +31,14 @@ and asks before it spends anything; failed runs are refunded automatically.
 
 ## Quickstart
 
-**1. Install** (Node.js 22.12 or newer). The package is installed straight from GitHub; an npm registry
-release is coming.
+**1. Install** (Node.js 22.12 or newer):
 
 ```bash
-npm install -g github:popnow-ai/popnow-cli
+npm install -g @popnow/cli
 popnow status          # no key needed: checks that the API answers
 ```
 
-Or run it once without installing: `npx github:popnow-ai/popnow-cli status`.
+Or run it once without installing: `npx @popnow/cli status`.
 
 **2. Set your API key** from [popnow.ai/api/console/keys](https://popnow.ai/api/console/keys). The key is read
 from the environment only, never from a command-line argument, so it does not end up in shell history or CI logs.

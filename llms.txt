@@ -4,7 +4,7 @@
 
 ## Install and authenticate
 
-- `npm install -g github:popnow-ai/popnow-cli` (or `npx github:popnow-ai/popnow-cli <command>`); an npm registry release is coming.
+- `npm install -g @popnow/cli` (or `npx @popnow/cli <command>`).
 - API key from https://popnow.ai/api/console/keys, read only from the `POPNOW_API_KEY` environment variable (never a CLI argument). Optional `POPNOW_BASE_URL` (default `https://api.popnow.ai`).
 
 ## Commands
