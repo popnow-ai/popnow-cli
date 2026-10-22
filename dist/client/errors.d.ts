@@ -47,3 +47,12 @@ export declare class UploadError extends Error {
     readonly name = "UploadError";
     constructor(message: string, status: number);
 }
+/**
+ * Downloading a skill archive failed after the API answered: the short-lived link was refused or
+ * expired, or the archive is larger than the client accepts.
+ */
+export declare class SkillDownloadError extends Error {
+    readonly status?: number | undefined;
+    readonly name = "SkillDownloadError";
+    constructor(message: string, status?: number | undefined);
+}

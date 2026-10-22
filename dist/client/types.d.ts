@@ -119,3 +119,32 @@ export interface ServiceStatus {
     error?: string;
     checkedAt: string;
 }
+export interface AgentSkill {
+    slug: string;
+    name?: string;
+    summary?: string;
+    /** For example `video`, `image`, `slides` or `web`. */
+    type?: string;
+    tasks?: string[];
+    /** The PopNow models or features the skill uses. */
+    popnow?: string[];
+    /** What the skill needs besides the agent, for example `POPNOW_API_KEY` or `python3`. */
+    requires?: string[];
+    version?: string;
+    updated?: string;
+    url?: string;
+    distribution?: unknown;
+    /** Install hints per agent, when the catalog sends them. */
+    install?: unknown;
+    [key: string]: unknown;
+}
+export interface ListAgentSkillsOptions {
+    q?: string;
+    type?: string;
+    task?: string;
+}
+export interface DownloadedSkill {
+    bytes: Uint8Array;
+    /** Host of the short-lived link the archive came from; never the full signed URL. */
+    source: string;
+}

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 
 import { Command, CommanderError, InvalidArgumentError, Option } from "commander";
 
@@ -22,6 +23,7 @@ import {
   requireConfirmation,
   type CliIo,
 } from "./io.js";
+import { registerSkillsCommands } from "./skills.js";
 
 interface GlobalOptions {
   json?: boolean;
@@ -98,6 +100,10 @@ export interface CliDependencies {
   createClient?: (options: PopNowClientOptions) => PopNowClient;
   /** Used by `docs search`; defaults to the global fetch. */
   fetch?: typeof fetch;
+  /** Home directory for agent skills folders; defaults to os.homedir(). */
+  homeDir?: string;
+  /** Project root for `skills --project`; defaults to the current working directory. */
+  cwd?: string;
 }
 
 interface CliOutcome {
@@ -294,7 +300,7 @@ export function createCli(dependencies: CliDependencies = {}, outcome: CliOutcom
   // Account
   program
     .command("balance")
-    .description("show available, held and total credits (1 credit = $0.01)")
+    .description("show available, held and total credits (1 credit = $0.001)")
     .action(async () => {
       outputValue(await client().getBalance(), json(), io);
     });
@@ -607,6 +613,14 @@ export function createCli(dependencies: CliDependencies = {}, outcome: CliOutcom
         if (!result.valid) outcome.exitCode = 1;
       },
     );
+
+  // Agent skills
+  registerSkillsCommands(program, {
+    io,
+    json,
+    client,
+    locations: () => ({ homeDir: dependencies.homeDir ?? homedir(), cwd: dependencies.cwd ?? process.cwd() }),
+  });
 
   // Docs
   const docs = program.command("docs").description("find PopNow documentation; no API key needed");

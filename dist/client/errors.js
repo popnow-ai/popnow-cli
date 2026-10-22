@@ -58,3 +58,15 @@ export class UploadError extends Error {
         this.status = status;
     }
 }
+/**
+ * Downloading a skill archive failed after the API answered: the short-lived link was refused or
+ * expired, or the archive is larger than the client accepts.
+ */
+export class SkillDownloadError extends Error {
+    status;
+    name = "SkillDownloadError";
+    constructor(message, status) {
+        super(message);
+        this.status = status;
+    }
+}

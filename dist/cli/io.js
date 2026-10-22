@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { MissingApiKeyError, PopNowApiError, UploadError } from "../client/errors.js";
+import { MissingApiKeyError, PopNowApiError, SkillDownloadError, UploadError } from "../client/errors.js";
+import { SkillArchiveError } from "../skills/zip.js";
 export const MAX_CLI_INPUT_BYTES = 1_048_576;
 export const KEY_PREFIX = "sk-popnow-";
 export const CONSOLE_KEYS_URL = "https://popnow.ai/api/console/keys";
@@ -52,6 +53,15 @@ export function defaultCliIo() {
             try {
                 const answer = await prompt.question(`${message} Continue? [y/N] `);
                 return /^(?:y|yes)$/i.test(answer.trim());
+            }
+            finally {
+                prompt.close();
+            }
+        },
+        ask: async (question) => {
+            const prompt = createInterface({ input: process.stdin, output: process.stderr });
+            try {
+                return (await prompt.question(question)).trim();
             }
             finally {
                 prompt.close();
@@ -171,6 +181,14 @@ export function describeNextStep(error, env) {
     if (error instanceof UploadError) {
         return "Next: the file bytes did not reach storage. Run `popnow files upload` again; an unused ticket simply expires.";
     }
+    if (error instanceof SkillArchiveError) {
+        return "Next: the downloaded archive was refused and nothing was installed. Run the command again; if it repeats, send the skill slug to https://popnow.ai/contact.";
+    }
+    if (error instanceof SkillDownloadError) {
+        return error.status === undefined
+            ? "Next: nothing was installed. Send the skill slug to https://popnow.ai/contact if this repeats."
+            : "Next: the short-lived download link was refused or has expired, and nothing was installed. Run the command again for a fresh link.";
+    }
     if (!(error instanceof PopNowApiError))
         return undefined;
     if (!error.fromApi) {
@@ -184,6 +202,9 @@ export function describeNextStep(error, env) {
     }
     if (error.reason && ASSET_HINTS[error.reason])
         return ASSET_HINTS[error.reason];
+    if (error.reason === "unknown_skill") {
+        return "Next: `popnow skills search` lists the skill slugs you can install.";
+    }
     if (error.reason === "unknown_model" || error.reason === "unknown_task") {
         return "Next: `popnow models list` shows the model IDs this key can call today.";
     }

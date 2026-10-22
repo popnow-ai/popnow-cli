@@ -49,6 +49,7 @@ export interface RecordedRequest {
   headers: Record<string, string>;
   body: string | undefined;
   rawBody: unknown;
+  redirect: RequestRedirect | undefined;
 }
 
 export type Handler = (request: RecordedRequest) => Response | Promise<Response>;
@@ -72,6 +73,7 @@ export function mockFetch(handlers: Handler[] | Handler): {
       headers,
       body: typeof init?.body === "string" ? init.body : undefined,
       rawBody: init?.body,
+      redirect: init?.redirect,
     };
     requests.push(request);
     const handler = Array.isArray(handlers) ? handlers[index++] : handlers;

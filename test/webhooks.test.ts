@@ -15,7 +15,7 @@ const BODY = Buffer.from(
   JSON.stringify({
     code: 200,
     msg: "success",
-    data: { taskId: "job_1", state: "succeeded", credits: 34, cost: "0.34", settled: true },
+    data: { taskId: "job_1", state: "succeeded", credits: 34, cost: "0.034", settled: true },
     request_id: "whd_1",
   }),
 );
@@ -45,7 +45,7 @@ describe("task callback verification", () => {
 
   it("rejects a changed body, a wrong secret and a stale timestamp", () => {
     const signature = sign(BODY, "job_1", NOW);
-    const changed = Buffer.from(BODY.toString().replace("0.34", "0.00"));
+    const changed = Buffer.from(BODY.toString().replace("0.034", "0.000"));
     expect(verifyTaskCallback({ rawBody: changed, timestamp: String(NOW), signature, secret: SECRET, nowSeconds: NOW }).valid).toBe(false);
     expect(verifyTaskCallback({ rawBody: BODY, timestamp: String(NOW), signature, secret: "other", nowSeconds: NOW }).valid).toBe(false);
     const old = NOW - 3600;

@@ -12,8 +12,8 @@ import { BASE, apiError, argv, captureIo, deps, envelope, mockFetch } from "./he
 const QUOTE = {
   quoteId: "q_signed",
   model: "alibaba/wan-3.0/image-to-video",
-  estimatedCost: "0.34",
-  maxCharge: "0.40",
+  estimatedCost: "0.034",
+  maxCharge: "0.040",
   maxCredits: 40,
   expectedCredits: 34,
   currency: "USD",
@@ -24,7 +24,7 @@ const QUOTE = {
 const CREATED = {
   taskId: "job_1",
   state: "queued",
-  estimatedCost: "0.40",
+  estimatedCost: "0.040",
   estimatedCredits: 40,
   deadlineAt: "2026-10-19T11:00:00Z",
 };
@@ -35,7 +35,7 @@ function task(state: string, extra: Record<string, unknown> = {}) {
     taskId: "job_1",
     model: QUOTE.model,
     state,
-    cost: "0.34",
+    cost: "0.034",
     credits: 34,
     settled: state !== "queued" && state !== "running",
     createdAt: "2026-10-19T10:00:00Z",
@@ -57,7 +57,7 @@ describe("program surface", () => {
     expect(await runCli(argv("--help"), { io: c.io })).toBe(0);
     expect(c.out()).not.toContain("--api-key");
     expect(c.out()).toContain("POPNOW_API_KEY");
-    for (const command of ["status", "models", "balance", "usage", "jobs", "files", "assets", "webhooks", "docs"]) {
+    for (const command of ["status", "models", "balance", "usage", "jobs", "files", "assets", "webhooks", "skills", "docs"]) {
       expect(c.out()).toContain(command);
     }
   });
@@ -234,7 +234,7 @@ describe("jobs create", () => {
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
     expect(create!.headers["x-popnow-retention"]).toBe("3600");
     expect(JSON.parse(c.out())).toEqual({ idempotencyKey: key, ...CREATED });
-    expect(c.err()).toContain("Price: 34 credits (USD 0.34); at most 40 credits (USD 0.40)");
+    expect(c.err()).toContain("Price: 34 credits (USD 0.034); at most 40 credits (USD 0.040)");
     expect(c.err()).toContain(`Idempotency-Key: ${key}`);
   });
 

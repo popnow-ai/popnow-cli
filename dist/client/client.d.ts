@@ -1,7 +1,9 @@
-import type { CreateTaskRequest, CreatedTask, ListAssetsOptions, ListModelsOptions, ListTasksOptions, ServiceStatus, TaskQuote, TaskRecord, TaskRequest, UploadTicket, UploadedFile } from "./types.js";
+import type { CreateTaskRequest, CreatedTask, DownloadedSkill, ListAgentSkillsOptions, ListAssetsOptions, ListModelsOptions, ListTasksOptions, ServiceStatus, TaskQuote, TaskRecord, TaskRequest, UploadTicket, UploadedFile } from "./types.js";
 export declare const DEFAULT_BASE_URL = "https://api.popnow.ai";
 export declare const API_PREFIX = "/api/v1";
 export declare const USER_AGENT: string;
+/** Largest skill archive the client downloads, about 100 MB. */
+export declare const MAX_SKILL_ARCHIVE_BYTES: number;
 export declare const TERMINAL_STATES: ReadonlySet<string>;
 export interface PopNowClientOptions {
     apiKey?: string | undefined;
@@ -13,6 +15,8 @@ export interface PopNowClientOptions {
     maxRetries?: number | undefined;
     /** Timeout for moving file bytes during an upload. Default 10 min. */
     uploadTimeoutMs?: number | undefined;
+    /** Timeout for downloading a skill archive from its short-lived link. Default 5 min. */
+    downloadTimeoutMs?: number | undefined;
     fetch?: typeof fetch | undefined;
     sleep?: ((ms: number) => Promise<void>) | undefined;
     now?: (() => number) | undefined;
@@ -35,6 +39,7 @@ export declare class PopNowClient {
     private readonly timeoutMs;
     private readonly maxRetries;
     private readonly uploadTimeoutMs;
+    private readonly downloadTimeoutMs;
     private readonly fetchImpl;
     private readonly sleep;
     private readonly now;
@@ -74,6 +79,23 @@ export declare class PopNowClient {
     listAssets(options?: ListAssetsOptions): Promise<unknown>;
     getAsset(assetId: string): Promise<unknown>;
     getAssetUsage(): Promise<unknown>;
+    /**
+     * `GET /agent-skills`. The key is sent when there is one but not required here: whether the
+     * catalog needs it is the server's call, and a 401 then explains itself.
+     */
+    listAgentSkills(options?: ListAgentSkillsOptions): Promise<unknown>;
+    /** `GET /agent-skills/{slug}`: one skill with install hints per agent. */
+    getAgentSkill(slug: string): Promise<unknown>;
+    /**
+     * `GET /agent-skills/{slug}/download` answers with a redirect to a short-lived signed link. The
+     * redirect is followed by hand so the API key never travels to the storage host. A server that
+     * sends the ZIP itself, or a JSON envelope with the link, works as well.
+     */
+    downloadAgentSkill(slug: string, options?: {
+        maxBytes?: number;
+    }): Promise<DownloadedSkill>;
+    /** The signed link carries its own authorization: the API key must not be sent along. */
+    private fetchSkillArchive;
     private request;
     private fetchOnce;
     private backoff;

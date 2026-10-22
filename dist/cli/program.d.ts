@@ -8,6 +8,10 @@ export interface CliDependencies {
     createClient?: (options: PopNowClientOptions) => PopNowClient;
     /** Used by `docs search`; defaults to the global fetch. */
     fetch?: typeof fetch;
+    /** Home directory for agent skills folders; defaults to os.homedir(). */
+    homeDir?: string;
+    /** Project root for `skills --project`; defaults to the current working directory. */
+    cwd?: string;
 }
 interface CliOutcome {
     exitCode: number;

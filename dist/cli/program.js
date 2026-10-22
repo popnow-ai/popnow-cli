@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { Command, CommanderError, InvalidArgumentError, Option } from "commander";
 import { DEFAULT_BASE_URL, PopNowClient } from "../client/client.js";
 import { DOC_TOPICS, OPENAPI_URL, findTopic, searchDocs } from "../client/docs.js";
@@ -7,6 +8,7 @@ import { PopNowApiError, WaitTimeoutError } from "../client/errors.js";
 import { verifyAccountEndpoint, verifyTaskCallback } from "../client/webhooks.js";
 import { CLI_VERSION } from "../version.js";
 import { defaultCliIo, describeNextStep, describeServiceStatus, describeTaskRetention, inferUploadContentType, outputValue, parseRetentionSeconds, parseUploadContentType, readInputObject, requireConfirmation, } from "./io.js";
+import { registerSkillsCommands } from "./skills.js";
 /**
  * "The task was accepted, but waiting for it failed." Its own type, so the task id reaches the
  * final error output in both human and `--json` mode. Without it a dropped connection during
@@ -208,7 +210,7 @@ export function createCli(dependencies = {}, outcome = { exitCode: 0 }) {
     // Account
     program
         .command("balance")
-        .description("show available, held and total credits (1 credit = $0.01)")
+        .description("show available, held and total credits (1 credit = $0.001)")
         .action(async () => {
         outputValue(await client().getBalance(), json(), io);
     });
@@ -463,6 +465,13 @@ export function createCli(dependencies = {}, outcome = { exitCode: 0 }) {
         outputValue(result, json(), io);
         if (!result.valid)
             outcome.exitCode = 1;
+    });
+    // Agent skills
+    registerSkillsCommands(program, {
+        io,
+        json,
+        client,
+        locations: () => ({ homeDir: dependencies.homeDir ?? homedir(), cwd: dependencies.cwd ?? process.cwd() }),
     });
     // Docs
     const docs = program.command("docs").description("find PopNow documentation; no API key needed");

@@ -11,7 +11,7 @@
 
 - `popnow status` - checks `GET /healthz`; no key.
 - `popnow models list [--modality image|video|audio] [--provider] [--task] [--search] [--include-schema]`, `popnow models get <model>` - `GET /api/v1/models[/{model}]`.
-- `popnow balance` - `GET /api/v1/chat/credit` (credits; 1 credit = $0.01). `popnow usage [--from --to]` - `GET /api/v1/usage`.
+- `popnow balance` - `GET /api/v1/chat/credit` (credits; 1 credit = $0.001). `popnow usage [--from --to]` - `GET /api/v1/usage`.
 - `popnow jobs quote --model <id> --input-json '<json>'` - `POST /api/v1/jobs/quote`, nothing is held.
 - `popnow jobs create --model <id> --input-json|--input-file <...> [--callback-url] [--idempotency-key] [--retention 1h] [--yes] [--wait]` - quotes, shows the price, asks to confirm, then `POST /api/v1/jobs/createTask` with `quoteId`, `expectedCredits` and an automatic `Idempotency-Key`; `--wait` polls `GET /api/v1/jobs/recordInfo`.
 - `popnow jobs list|get|wait|retry|purge` - `GET /api/v1/jobs`, `recordInfo`, polling, `POST /api/v1/jobs/retry`, `POST /api/v1/jobs/purge`.
@@ -19,6 +19,9 @@
 - `popnow assets list|get|usage` - the private asset library (`popnow://a/...` URIs).
 - `popnow webhooks verify --body-file --timestamp --signature [--webhook-id]` - task callback or Standard Webhooks signature check; secret from `POPNOW_WEBHOOK_SECRET` / `POPNOW_ENDPOINT_SECRET`.
 - `popnow docs`, `popnow docs open <topic>`, `popnow docs search <words>`.
+- `popnow skills search [query] [--type video|image|slides|web] [--task <task>]`, `popnow skills info <slug>` - `GET /api/v1/agent-skills[/{slug}]`; the key is sent when set.
+- `popnow skills add <slug...> [--agent claude-code|codex|cursor|gemini-cli|github-copilot|opencode] [--project] [--dir <path>] [--force] [--dry-run]` - `GET /api/v1/agent-skills/{slug}/download` (302 to a signed ZIP, followed without the key), checks the archive, installs `<skills folder>/popnow-<slug>/` and prints how to call it. Agent detected from `~/.claude`, `~/.codex` / `~/.agents`, `~/.cursor`, `~/.gemini`, `~/.copilot`, `~/.config/opencode` when `--agent` is omitted.
+- `popnow skills list-installed [--agent <id>] [--project]`, `popnow skills remove <slug> [--agent <id>] [--project] [--dir <path>] [--yes]` - local only, no key.
 - Global: `--json`, `--base-url`, `--timeout-ms`, `--max-retries`. Exit codes: 0 ok, 1 error, 2 waited task did not succeed.
 
 ## Facts
@@ -26,6 +29,7 @@
 - Model IDs look like `<maker>/<model>/<task>`, e.g. `alibaba/z-image-turbo/text-to-image`, `alibaba/wan-3.0/image-to-video`.
 - Responses use the envelope `{code,msg,data,request_id}`; errors print a `Next:` hint per business code.
 - Task states: queued, running, succeeded, failed, expired. Failed tasks are refunded. Output links last about 20 minutes.
+- Skill folders: Claude Code `~/.claude/skills` (`.claude/skills`), Codex `~/.agents/skills` (`.agents/skills`), Cursor `~/.cursor/skills` (`.cursor/skills`), Gemini CLI `~/.gemini/skills` (`.gemini/skills`), GitHub Copilot `~/.copilot/skills` (`.github/skills`), OpenCode `~/.config/opencode/skills` (`.opencode/skills`).
 
 ## Links
 

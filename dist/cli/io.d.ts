@@ -8,6 +8,8 @@ export interface CliIo {
     stdinIsTTY: boolean;
     readStdin: () => Promise<string>;
     confirm: (message: string) => Promise<boolean>;
+    /** Asks a free-form question at the terminal. Optional; without it the CLI never prompts for a choice. */
+    ask?: (question: string) => Promise<string>;
     /** Opens a URL in the default browser. Resolves false when nothing could be opened. */
     openUrl: (url: string) => Promise<boolean>;
     env: NodeJS.ProcessEnv;

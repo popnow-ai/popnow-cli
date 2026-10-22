@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { CLI_VERSION } from "../version.js";
-import { MissingApiKeyError, PopNowApiError, PopNowConnectionError, UploadError, WaitTimeoutError, } from "./errors.js";
+import { MissingApiKeyError, PopNowApiError, PopNowConnectionError, SkillDownloadError, UploadError, WaitTimeoutError, } from "./errors.js";
 export const DEFAULT_BASE_URL = "https://api.popnow.ai";
 export const API_PREFIX = "/api/v1";
 /*
@@ -13,6 +13,9 @@ const RETRYABLE_CODES = new Set([429, 500, 503, 50301]);
 /** HTTP statuses worth retrying when the body is not a PopNow envelope (edge and proxy errors). */
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524]);
 const MAX_RETRY_AFTER_MS = 60_000;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+/** Largest skill archive the client downloads, about 100 MB. */
+export const MAX_SKILL_ARCHIVE_BYTES = 100 * 1024 * 1024;
 export const TERMINAL_STATES = new Set([
     "succeeded",
     "failed",
@@ -30,6 +33,7 @@ export class PopNowClient {
     timeoutMs;
     maxRetries;
     uploadTimeoutMs;
+    downloadTimeoutMs;
     fetchImpl;
     sleep;
     now;
@@ -39,6 +43,7 @@ export class PopNowClient {
         this.timeoutMs = options.timeoutMs ?? 60_000;
         this.maxRetries = Math.min(5, Math.max(0, options.maxRetries ?? 2));
         this.uploadTimeoutMs = options.uploadTimeoutMs ?? 600_000;
+        this.downloadTimeoutMs = options.downloadTimeoutMs ?? 300_000;
         this.fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
         this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
         this.now = options.now ?? (() => Date.now());
@@ -198,6 +203,113 @@ export class PopNowClient {
     getAssetUsage() {
         return this.request("GET", "/assets/usage", { retryable: true });
     }
+    /**
+     * `GET /agent-skills`. The key is sent when there is one but not required here: whether the
+     * catalog needs it is the server's call, and a 401 then explains itself.
+     */
+    listAgentSkills(options = {}) {
+        return this.request("GET", "/agent-skills", {
+            query: { q: options.q, type: options.type, task: options.task },
+            retryable: true,
+            auth: false,
+        });
+    }
+    /** `GET /agent-skills/{slug}`: one skill with install hints per agent. */
+    async getAgentSkill(slug) {
+        const id = encodeURIComponent(requireId(slug, "slug"));
+        try {
+            return await this.request("GET", `/agent-skills/${id}`, { retryable: true, auth: false });
+        }
+        catch (error) {
+            throw asUnknownSkill(error);
+        }
+    }
+    /**
+     * `GET /agent-skills/{slug}/download` answers with a redirect to a short-lived signed link. The
+     * redirect is followed by hand so the API key never travels to the storage host. A server that
+     * sends the ZIP itself, or a JSON envelope with the link, works as well.
+     */
+    async downloadAgentSkill(slug, options = {}) {
+        if (!this.apiKey)
+            throw new MissingApiKeyError();
+        const maxBytes = options.maxBytes ?? MAX_SKILL_ARCHIVE_BYTES;
+        const url = `${this.baseUrl}${API_PREFIX}/agent-skills/${encodeURIComponent(requireId(slug, "slug"))}/download`;
+        const init = {
+            method: "GET",
+            redirect: "manual",
+            headers: {
+                Accept: "application/zip, application/json",
+                "User-Agent": USER_AGENT,
+                Authorization: `Bearer ${this.apiKey}`,
+            },
+        };
+        for (let attempt = 0;; attempt++) {
+            let response;
+            try {
+                response = await this.fetchOnce(url, init, this.timeoutMs);
+            }
+            catch (error) {
+                if (attempt < this.maxRetries) {
+                    await this.backoff(attempt, undefined);
+                    continue;
+                }
+                throw new PopNowConnectionError(`could not reach ${this.baseUrl}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+            }
+            if (REDIRECT_STATUSES.has(response.status)) {
+                const location = response.headers.get("location");
+                await response.body?.cancel().catch(() => undefined);
+                if (!location) {
+                    throw new SkillDownloadError("the skill download answered a redirect without a Location header");
+                }
+                return this.fetchSkillArchive(new URL(location, url), maxBytes);
+            }
+            if (response.ok) {
+                if (/json/i.test(response.headers.get("content-type") ?? "")) {
+                    const result = await parseEnvelope(response);
+                    if (result instanceof PopNowApiError)
+                        throw asUnknownSkill(result);
+                    const link = pickDownloadLink(result.data);
+                    if (!link) {
+                        throw new SkillDownloadError("the skill download answer carried neither an archive nor a link to one");
+                    }
+                    return this.fetchSkillArchive(new URL(link, url), maxBytes);
+                }
+                return { bytes: await readCapped(response, maxBytes, this.timeoutMs), source: new URL(url).host };
+            }
+            const result = await parseEnvelope(response);
+            // A non-2xx answer always parses to an error; the fallback only satisfies the type.
+            const error = result instanceof PopNowApiError
+                ? result
+                : new PopNowApiError({ message: `HTTP ${response.status}`, status: response.status, fromApi: false });
+            const retryable = error.fromApi
+                ? error.code !== undefined && RETRYABLE_CODES.has(error.code)
+                : RETRYABLE_STATUSES.has(error.status);
+            if (!retryable || attempt >= this.maxRetries)
+                throw asUnknownSkill(error);
+            await this.backoff(attempt, error.retryAfterSeconds);
+        }
+    }
+    /** The signed link carries its own authorization: the API key must not be sent along. */
+    async fetchSkillArchive(link, maxBytes) {
+        if (link.protocol !== "https:" && link.protocol !== "http:") {
+            throw new SkillDownloadError(`the skill download link uses an unsupported scheme (${link.protocol})`);
+        }
+        let response;
+        try {
+            response = await this.fetchOnce(link.href, {
+                method: "GET",
+                headers: { Accept: "application/zip, application/octet-stream", "User-Agent": USER_AGENT },
+            }, this.downloadTimeoutMs);
+        }
+        catch (error) {
+            throw new PopNowConnectionError(`skill download from ${link.host} failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+        }
+        if (!response.ok) {
+            await response.body?.cancel().catch(() => undefined);
+            throw new SkillDownloadError(`the skill download link answered HTTP ${response.status} (${link.host})`, response.status);
+        }
+        return { bytes: await readCapped(response, maxBytes, this.downloadTimeoutMs), source: link.host };
+    }
     async request(method, path, config = {}) {
         if (config.auth !== false && !this.apiKey)
             throw new MissingApiKeyError();
@@ -261,6 +373,77 @@ function requireId(value, label) {
         throw new TypeError(`${label} must be a non-empty string`);
     }
     return value.trim();
+}
+/**
+ * A 404 from a skill endpoint means the slug is unknown; tagging it lets the CLI point at
+ * `popnow skills search` instead of the generic "check the id" hint.
+ */
+function asUnknownSkill(error) {
+    if (error instanceof PopNowApiError && error.fromApi && error.status === 404 && error.reason === undefined) {
+        return new PopNowApiError({
+            message: error.message,
+            status: error.status,
+            code: error.code,
+            requestId: error.requestId,
+            reason: "unknown_skill",
+            retryAfterSeconds: error.retryAfterSeconds,
+            fromApi: true,
+        });
+    }
+    return error;
+}
+function pickDownloadLink(data) {
+    if (typeof data === "string" && data.trim() !== "")
+        return data.trim();
+    if (data === null || typeof data !== "object")
+        return undefined;
+    for (const key of ["url", "downloadUrl", "download_url", "href"]) {
+        const value = data[key];
+        if (typeof value === "string" && value.trim() !== "")
+            return value.trim();
+    }
+    return undefined;
+}
+/** Reads a response body, refusing it as soon as it passes `maxBytes`. */
+async function readCapped(response, maxBytes, timeoutMs) {
+    const declared = Number(response.headers.get("content-length") ?? Number.NaN);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new SkillDownloadError(`the skill archive is ${declared} bytes; the limit is ${maxBytes}`);
+    }
+    if (!response.body)
+        return new Uint8Array(0);
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done)
+                break;
+            total += value.byteLength;
+            if (total > maxBytes) {
+                await reader.cancel().catch(() => undefined);
+                throw new SkillDownloadError(`the skill archive is larger than the ${maxBytes}-byte limit`);
+            }
+            chunks.push(value);
+        }
+    }
+    catch (error) {
+        if (error instanceof SkillDownloadError)
+            throw error;
+        const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+        throw new PopNowConnectionError(timedOut
+            ? `skill download timed out after ${timeoutMs} ms`
+            : `skill download was interrupted: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return bytes;
 }
 function buildQuery(query) {
     if (!query)

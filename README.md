@@ -64,7 +64,7 @@ popnow jobs create \
 | --- | --- | --- |
 | `popnow status` | Checks that `api.popnow.ai` answers, in one sentence | No |
 | `popnow models list` / `models get <model>` | Live model catalog with credit prices and input JSON Schemas | Yes |
-| `popnow balance` | Available, held and total credits (1 credit = $0.01) | Yes |
+| `popnow balance` | Available, held and total credits (1 credit = $0.001) | Yes |
 | `popnow usage` | Settled usage for the current key, by day and model | Yes |
 | `popnow jobs quote` | Prices a request without creating a task or holding credits | Yes |
 | `popnow jobs create` | Quote, confirm, create; `--wait` polls until the task is final | Yes |
@@ -76,6 +76,9 @@ popnow jobs create \
 | `popnow assets list` / `get` / `usage` | Your private asset library (`popnow://a/` URIs) and its plan | Yes |
 | `popnow webhooks verify` | Checks a task callback or account endpoint signature from the raw body | No (secret from env) |
 | `popnow docs` / `docs open <topic>` / `docs search <words>` | Documentation links, opened in the browser, or searched live | No |
+| `popnow skills search` / `skills info <slug>` | The PopNow agent skills catalog for coding agents | Sent when set |
+| `popnow skills add <slug...>` | Downloads a skill and installs it for Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot or OpenCode | Yes |
+| `popnow skills list-installed` / `skills remove <slug>` | PopNow skills installed on this machine, and removing one | No |
 
 Design choices that matter in scripts:
 
@@ -196,6 +199,45 @@ Reads, quotes and idempotent writes are retried on `429`, `500`, `503`, `50301` 
 | `1` | Error: API error, network error, invalid input, refused confirmation, invalid webhook signature |
 | `2` | `--wait` / `jobs wait` finished, but the task ended `failed`, `expired` or `canceled` |
 
+## Agent skills
+
+PopNow skills teach a coding agent to make videos, images, slides and web assets with PopNow. The CLI finds
+them in the catalog, downloads them with your API key and installs each one as a `popnow-<slug>/` folder with a
+`SKILL.md` where the agent looks for skills:
+
+```bash
+popnow skills search product video --type video     # --type video|image|slides|web, --task <task>
+popnow skills info <slug>                           # what it does, what it needs, install hints
+popnow skills add <slug>                            # detects the agent; several slugs at once are fine
+popnow skills add <slug> --agent codex --project    # into this project instead of your user folder
+popnow skills list-installed                        # popnow-* skills in every known folder, with versions
+popnow skills remove <slug>                         # asks first; --yes in scripts
+```
+
+| Agent | `--agent` | User folder | Project folder (`--project`) | Call it with |
+| --- | --- | --- | --- | --- |
+| Claude Code | `claude-code` | `~/.claude/skills` | `.claude/skills` | `/popnow-<slug>` |
+| Codex | `codex` | `~/.agents/skills` | `.agents/skills` | `$popnow-<slug>` |
+| Cursor | `cursor` | `~/.cursor/skills` | `.cursor/skills` | its name, or a matching request |
+| Gemini CLI | `gemini-cli` | `~/.gemini/skills` | `.gemini/skills` | its name, or a matching request |
+| GitHub Copilot | `github-copilot` | `~/.copilot/skills` | `.github/skills` | its name, or a matching request |
+| OpenCode | `opencode` | `~/.config/opencode/skills` | `.opencode/skills` | its name, or a matching request |
+
+Several agents also read `~/.agents/skills`. On Windows `~` is your user profile folder.
+
+- **Which agent.** Without `--agent`, `add` looks for the agents' folders in your home directory (with
+  `--project`, in the project first). When it finds several, it asks at a terminal and needs `--agent` in a
+  script. `--dir <path>` installs into any skills folder instead.
+- **Nothing is overwritten by accident.** `add` refuses to replace an installed copy unless you pass `--force`,
+  and `--dry-run` prints the target folders without downloading or writing anything.
+- **The archive is checked before a byte is written**: exactly one top folder `popnow-<slug>/` containing
+  `SKILL.md`, no absolute paths, `..` or symbolic links, about 100 MB at most. Files are unpacked into a staging
+  folder and moved into place in one step, so the agent never sees half a skill.
+- **The key stays with the API.** The download endpoint redirects to a short-lived signed link; the CLI follows it
+  without the `Authorization` header.
+- **Credits.** The skills quote the price in credits before any paid generation and wait for your OK, and they
+  read `POPNOW_API_KEY` from the environment the agent runs in.
+
 ## FAQ
 
 ### How do I generate a video from an image with a command-line tool?
@@ -206,7 +248,7 @@ Install the CLI, export `POPNOW_API_KEY`, then run `popnow jobs create --model a
 
 ### How much does a generation cost, and can I see the price before I pay?
 
-Every model has a price in credits (1 credit = $0.01), listed by `popnow models list`. `popnow jobs quote`
+Every model has a price in credits (1 credit = $0.001), listed by `popnow models list`. `popnow jobs quote`
 prices the exact request without holding anything, and `popnow jobs create` always shows that quote and asks
 before it creates the task. Failed tasks release their hold, so they cost nothing.
 
@@ -215,6 +257,12 @@ before it creates the task. Failed tasks release their hold, so they cost nothin
 Pass `--yes` to confirm the charge, `--json` for machine-readable output, and a stable `--idempotency-key`
 so a retried job never creates a second task. Check the exit code: `2` means the task finished but did not
 succeed.
+
+### How do I add PopNow to Claude Code, Codex or Cursor?
+
+Run `popnow skills search` to pick a skill, then `popnow skills add <slug>`. The CLI detects the agent (or takes
+`--agent claude-code|codex|cursor|gemini-cli|github-copilot|opencode`), installs the skill into its skills
+folder and prints how to call it, for example `/popnow-<slug>` in Claude Code.
 
 ### Why is there no `--api-key` option?
 
