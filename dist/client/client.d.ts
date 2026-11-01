@@ -1,4 +1,4 @@
-import type { CreateTaskRequest, CreatedTask, DownloadedSkill, ListAgentSkillsOptions, ListAssetsOptions, ListModelsOptions, ListTasksOptions, ServiceStatus, TaskQuote, TaskRecord, TaskRequest, UploadTicket, UploadedFile } from "./types.js";
+import type { Balance, CreateTaskRequest, CreatedTask, DownloadedSkill, ListAgentSkillsOptions, ListAssetsOptions, ListModelsOptions, ListTasksOptions, ServiceStatus, TaskQuote, TaskRecord, TaskRequest, UploadTicket, UploadedFile } from "./types.js";
 export declare const DEFAULT_BASE_URL = "https://api.popnow.ai";
 export declare const API_PREFIX = "/api/v1";
 export declare const USER_AGENT: string;
@@ -48,7 +48,8 @@ export declare class PopNowClient {
     getStatus(): Promise<ServiceStatus>;
     listModels(options?: ListModelsOptions): Promise<unknown>;
     getModel(model: string): Promise<unknown>;
-    getBalance(): Promise<unknown>;
+    /** `GET /chat/credit`: the API balance in exact USD. The path name is historical. */
+    getBalance(): Promise<Balance>;
     getUsage(options?: {
         from?: string;
         to?: string;

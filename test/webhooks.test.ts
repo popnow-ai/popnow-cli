@@ -15,7 +15,7 @@ const BODY = Buffer.from(
   JSON.stringify({
     code: 200,
     msg: "success",
-    data: { taskId: "job_1", state: "succeeded", credits: 34, cost: "0.034", settled: true },
+    data: { taskId: "job_1", state: "succeeded", costUsd: "0.034", cost: "0.034", credits: 34, settled: true },
     request_id: "whd_1",
   }),
 );

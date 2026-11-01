@@ -3,8 +3,9 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { Command, CommanderError, InvalidArgumentError, Option } from "commander";
 import { DEFAULT_BASE_URL, PopNowClient } from "../client/client.js";
-import { DOC_TOPICS, OPENAPI_URL, findTopic, searchDocs } from "../client/docs.js";
+import { AGENT_SKILLS_PAGE, DEVELOPER_MCP_ENDPOINT, DEVELOPER_MCP_PAGE, DOC_TOPICS, OPENAPI_URL, findTopic, searchDocs, } from "../client/docs.js";
 import { PopNowApiError, WaitTimeoutError } from "../client/errors.js";
+import { ADD_FUNDS_URL, balanceUsd, formatUsd, holdConfirmation, isZeroOrNegative, quoteExpectedUsd, quoteMaxUsd, taskCostUsd, } from "../client/money.js";
 import { verifyAccountEndpoint, verifyTaskCallback } from "../client/webhooks.js";
 import { CLI_VERSION } from "../version.js";
 import { defaultCliIo, describeNextStep, describeServiceStatus, describeTaskRetention, inferUploadContentType, outputValue, parseRetentionSeconds, parseUploadContentType, readInputObject, requireConfirmation, } from "./io.js";
@@ -94,9 +95,24 @@ function describeError(error) {
         return { error: error.message, type: error.name };
     return { error: "unknown error", type: "Error" };
 }
+/** The quoted price in USD, as shown before a task is created. */
+function describePrice(quote) {
+    const max = quoteMaxUsd(quote);
+    if (max === undefined)
+        return "Price: the quote carried no USD amount; the quote id still locks its price.";
+    const expected = quoteExpectedUsd(quote);
+    const typical = expected === undefined || expected === max ? formatUsd(max) : `${formatUsd(expected)} expected`;
+    return `Price: ${typical}; at most ${formatUsd(max)} is held from your API balance and unused funds are released.`;
+}
 /** Plain-text lines for a task's files, so a terminal user does not have to dig through JSON. */
 function describeOutputs(task) {
     const lines = [];
+    const cost = taskCostUsd(task);
+    if (cost !== undefined) {
+        lines.push(task.settled
+            ? `Charged: ${formatUsd(cost)}`
+            : `Held: ${formatUsd(cost)} (the final charge is at most this; unused funds are released)`);
+    }
     for (const asset of task.output?.assets ?? []) {
         if (asset.url)
             lines.push(`Output: ${asset.url}${asset.expiresAt ? ` (link expires ${asset.expiresAt})` : ""}`);
@@ -182,7 +198,7 @@ export function createCli(dependencies = {}, outcome = { exitCode: 0 }) {
     const models = program.command("models").description("browse the live model catalog and prices");
     models
         .command("list")
-        .description("list the image, video and audio models this key can call, with credit prices")
+        .description("list the image, video and audio models this key can call, with USD prices")
         .addOption(new Option("--modality <type>", "filter by output").choices(["image", "video", "audio"]))
         .option("--provider <name>", "exact model maker, for example kling")
         .option("--task <task>", "exact task, for example text-to-video")
@@ -203,20 +219,49 @@ export function createCli(dependencies = {}, outcome = { exitCode: 0 }) {
     models
         .command("get")
         .argument("<model>", "exact model ID, for example alibaba/wan-3.0/image-to-video")
-        .description("get one model with its price and input schema")
+        .description("get one model with its USD price and input schema")
         .action(async (model) => {
         outputValue(await client().getModel(model), json(), io);
     });
     // Account
     program
         .command("balance")
-        .description("show available, held and total credits (1 credit = $0.001)")
+        .description("show the API balance in USD: available, held and total")
         .action(async () => {
-        outputValue(await client().getBalance(), json(), io);
+        const balance = await client().getBalance();
+        if (json()) {
+            outputValue(balance, true, io);
+            return;
+        }
+        const amounts = balanceUsd(balance);
+        const shown = new Set([
+            "available",
+            "held",
+            "total",
+            "availableUsd",
+            "heldUsd",
+            "totalUsd",
+            "availableCredits",
+            "heldCredits",
+            "totalCredits",
+        ]);
+        if (amounts.available !== undefined)
+            io.stdout(`Available: ${formatUsd(amounts.available)}\n`);
+        if (amounts.held !== undefined)
+            io.stdout(`Held: ${formatUsd(amounts.held)}\n`);
+        if (amounts.total !== undefined)
+            io.stdout(`Total: ${formatUsd(amounts.total)}\n`);
+        const rest = Object.fromEntries(Object.entries(balance).filter(([key]) => !shown.has(key)));
+        if (Object.keys(rest).length > 0)
+            outputValue(rest, false, io);
+        if (amounts.available !== undefined && isZeroOrNegative(amounts.available)) {
+            io.stdout("Nothing is available for new tasks.\n");
+        }
+        io.stdout(`Add funds: ${ADD_FUNDS_URL}\n`);
     });
     program
         .command("usage")
-        .description("show settled usage for the current API key")
+        .description("show settled USD spend for the current API key, by day and model")
         .option("--from <date>", "inclusive UTC date (YYYY-MM-DD)")
         .option("--to <date>", "exclusive UTC date (YYYY-MM-DD), at most 92 days after --from")
         .action(async (options) => {
@@ -269,14 +314,17 @@ export function createCli(dependencies = {}, outcome = { exitCode: 0 }) {
         .option("--input-json <json>", "model input as a JSON object")
         .option("--input-file <path>", "model input JSON file; use - for stdin")
         .option("--callback-url <url>", "public HTTPS URL for the finished task")
-        .description("price a request in credits without creating a task or holding credits")
+        .description("price a request in USD without creating a task or holding funds")
         .action(async (options) => {
         const input = await readInputObject(options.inputJson, options.inputFile, io);
-        outputValue(await client().quoteTask({
+        const quote = await client().quoteTask({
             model: options.model,
             input,
             ...(options.callbackUrl === undefined ? {} : { callBackUrl: options.callbackUrl }),
-        }), json(), io);
+        });
+        outputValue(quote, json(), io);
+        if (!json())
+            io.stdout(`${describePrice(quote)}\n`);
     });
     jobs
         .command("create")
@@ -310,12 +358,10 @@ export function createCli(dependencies = {}, outcome = { exitCode: 0 }) {
             : options.retention === 0
                 ? ` Retention: the ${DESTROYED_CONTENT} are removed once the task finishes; billing records are kept.`
                 : ` Retention: the ${DESTROYED_CONTENT} are kept for at most ${options.retention} s; billing records are kept.`;
-        const price = `Price: ${quote.expectedCredits} credits (USD ${quote.estimatedCost}); ` +
-            `at most ${quote.maxCredits} credits (USD ${quote.maxCharge}) is held and unused credits are released. ` +
-            `Quote expires: ${quote.expiresAt}.${retentionNote}`;
+        const price = `${describePrice(quote)} Quote expires: ${quote.expiresAt}.${retentionNote}`;
         io.stderr(`${price}\nIdempotency-Key: ${idempotencyKey}\n`);
         await requireConfirmation(`Create a task with ${options.model}? ${price}`, Boolean(options.yes), io);
-        const created = await api.createTask({ ...payload, quoteId: quote.quoteId, expectedCredits: quote.maxCredits }, {
+        const created = await api.createTask({ ...payload, quoteId: quote.quoteId, ...holdConfirmation(quote) }, {
             idempotencyKey,
             ...(options.retention === undefined ? {} : { retentionSeconds: options.retention }),
         });
@@ -480,14 +526,22 @@ export function createCli(dependencies = {}, outcome = { exitCode: 0 }) {
         .description("print links to the main documentation pages")
         .action(() => {
         if (json()) {
-            outputValue({ topics: DOC_TOPICS, openapi: OPENAPI_URL, llms: "https://popnow.ai/llms.txt" }, true, io);
+            outputValue({
+                topics: DOC_TOPICS,
+                openapi: OPENAPI_URL,
+                llms: "https://popnow.ai/llms.txt",
+                mcp: { endpoint: DEVELOPER_MCP_ENDPOINT, setup: DEVELOPER_MCP_PAGE },
+                skills: AGENT_SKILLS_PAGE,
+            }, true, io);
             return;
         }
         const width = Math.max(...DOC_TOPICS.map((item) => item.slug.length));
         for (const item of DOC_TOPICS) {
             io.stdout(`${item.slug.padEnd(width)}  ${item.url}\n${" ".repeat(width)}  ${item.summary}\n`);
         }
-        io.stdout(`\nOpenAPI contract: ${OPENAPI_URL}\nFor LLMs: https://popnow.ai/llms.txt\n`);
+        io.stdout(`\nOpenAPI contract: ${OPENAPI_URL}\nFor LLMs: https://popnow.ai/llms.txt\n` +
+            `Developer MCP: ${DEVELOPER_MCP_ENDPOINT} (setup: ${DEVELOPER_MCP_PAGE})\n` +
+            `Agent skills: ${AGENT_SKILLS_PAGE}\n`);
         io.stdout("Open one with `popnow docs open <topic>`, or search with `popnow docs search <words>`.\n");
     });
     docs

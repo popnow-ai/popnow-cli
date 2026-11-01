@@ -15,6 +15,10 @@ export interface CliIo {
     env: NodeJS.ProcessEnv;
 }
 export declare function defaultCliIo(): CliIo;
+/**
+ * `--json` prints exactly what the server sent. The human-readable form shows amounts in USD and
+ * leaves out a deprecated credit field whenever the same object carries its USD counterpart.
+ */
 export declare function outputValue(value: unknown, json: boolean, io: CliIo): void;
 /**
  * `status` is the one command that needs no key and costs nothing, so it should say in a sentence
@@ -28,7 +32,7 @@ export declare function describeServiceStatus(status: ServiceStatus, baseUrl: st
 export declare function describeNextStep(error: unknown, env: NodeJS.ProcessEnv): string | undefined;
 export declare function readInputObject(inputJson: string | undefined, inputFile: string | undefined, io: CliIo): Promise<Record<string, unknown>>;
 /**
- * Spending credits and destroying content pass through the same gate: an answer at an interactive
+ * Spending money and destroying content pass through the same gate: an answer at an interactive
  * terminal, or an explicit `--yes`.
  */
 export declare function requireConfirmation(message: string, yes: boolean, io: CliIo, kind?: "billable" | "destructive"): Promise<void>;

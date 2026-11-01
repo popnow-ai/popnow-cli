@@ -84,6 +84,7 @@ export class PopNowClient {
         const path = requireId(model, "model").split("/").map(encodeURIComponent).join("/");
         return this.request("GET", `/models/${path}`, { retryable: true });
     }
+    /** `GET /chat/credit`: the API balance in exact USD. The path name is historical. */
     getBalance() {
         return this.request("GET", "/chat/credit", { retryable: true });
     }

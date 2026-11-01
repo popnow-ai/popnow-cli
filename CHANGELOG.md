@@ -5,6 +5,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
+The PopNow API bills in exact USD from its own API balance, separate from website credits. The CLI now shows,
+confirms and explains every amount in USD.
+
+### Changed
+
+- `jobs create` confirms the hold with `expectedCostUsd`, the quote's exact `maxChargeUsd`, instead of
+  `expectedCredits`. The price line reads `Price: $0.0342 expected; at most $0.0405 is held from your API balance`.
+- `balance` prints `Available`, `Held` and `Total` in USD from `availableUsd`, `heldUsd` and `totalUsd`, with a
+  link to add funds. `jobs quote` adds the same price line; `jobs get`, `jobs wait` and `jobs create --wait` add
+  `Charged:` or `Held:` in USD from `costUsd`.
+- Human-readable output leaves out a deprecated credit field (`maxCredits`, `expectedCredits`,
+  `estimatedCredits`, `credits`, `exactCredits`, `availableCredits`, `heldCredits`, `totalCredits`) whenever the
+  same object carries its USD field. `--json` output is unchanged and still passes every field through.
+- Insufficient balance (`40201`) points to https://popnow.ai/api/console/billing. The asset library hints no
+  longer suggest that a top-up unlocks storage.
+- `docs` lists the developer MCP server (`https://api.popnow.ai/api/v1/mcp`, setup at https://popnow.ai/api/mcp)
+  and the agent skills catalog (https://popnow.ai/api/skills); `docs open mcp` describes the developer server,
+  and the new `agent-skills` and `skills` topics open the skills docs and catalog.
+- README and llms.txt describe the USD API balance and link API pricing, API billing and the developer MCP.
+
+### Deprecated
+
+- The credit fields in the client types (`TaskQuote.maxCredits`, `TaskQuote.expectedCredits`,
+  `CreatedTask.estimatedCredits`, `TaskRecord.credits`, `TaskRecord.exactCredits`,
+  `CreateTaskRequest.expectedCredits` and the new `Balance` credit fields). They are read only when a response
+  carries no USD field, and `expectedCredits` is sent only when a quote has no USD amount at all.
+
 ### Added
 
 - `skills search|info|add|list-installed|remove` (alias `agent-skills`): find PopNow agent skills and install

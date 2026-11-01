@@ -10,6 +10,7 @@ import {
   WaitTimeoutError,
 } from "./errors.js";
 import type {
+  Balance,
   CreateTaskRequest,
   CreatedTask,
   DownloadedSkill,
@@ -154,8 +155,9 @@ export class PopNowClient {
     return this.request("GET", `/models/${path}`, { retryable: true });
   }
 
-  getBalance(): Promise<unknown> {
-    return this.request("GET", "/chat/credit", { retryable: true });
+  /** `GET /chat/credit`: the API balance in exact USD. The path name is historical. */
+  getBalance(): Promise<Balance> {
+    return this.request<Balance>("GET", "/chat/credit", { retryable: true });
   }
 
   getUsage(options: { from?: string; to?: string } = {}): Promise<unknown> {

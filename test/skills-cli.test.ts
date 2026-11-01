@@ -294,7 +294,8 @@ describe("skills add", () => {
     const out = c.out();
     expect(out).toContain(`Installed popnow-demo 1.2.0 for Claude Code: ${folder}`);
     expect(out).toContain("type /popnow-demo");
-    expect(out).toContain("quote the price in credits before any paid generation");
+    expect(out).toContain("quote the price in USD before any paid generation");
+    expect(out).toContain("paid from your API balance");
   });
 
   it("uses the $name syntax for Codex and the project folder with --project", async () => {

@@ -2,6 +2,12 @@ import { USER_AGENT } from "./client.js";
 
 export const DOCS_BASE_URL = "https://popnow.ai/docs";
 
+/** The developer MCP server: API key in the Authorization header, paid calls approved in USD. */
+export const DEVELOPER_MCP_ENDPOINT = "https://api.popnow.ai/api/v1/mcp";
+export const DEVELOPER_MCP_PAGE = "https://popnow.ai/api/mcp";
+/** The agent skills catalog for developers, with install commands per agent. */
+export const AGENT_SKILLS_PAGE = "https://popnow.ai/api/skills";
+
 export interface DocTopic {
   slug: string;
   title: string;
@@ -9,18 +15,21 @@ export interface DocTopic {
   url: string;
 }
 
-function topic(slug: string, title: string, summary: string): DocTopic {
-  return { slug, title, summary, url: `${DOCS_BASE_URL}/${slug}` };
+function topic(slug: string, title: string, summary: string, url = `${DOCS_BASE_URL}/${slug}`): DocTopic {
+  return { slug, title, summary, url };
 }
 
-/** The pages most CLI users need, in reading order. Each slug is a published page. */
+/**
+ * The pages most CLI users need, in reading order. Each slug is a published page under the docs,
+ * except `skills`, which is the agent skills catalog itself.
+ */
 export const DOC_TOPICS: readonly DocTopic[] = [
   topic("overview", "How the PopNow API works", "What the API can make and the ideas the rest builds on."),
   topic("quickstart", "Quickstart", "Create a key, send a first request and download the result."),
   topic("authentication", "Authentication", "Key format, storage, per-key restrictions and rotation."),
   topic("models", "Models", "Model IDs, prices and input schemas."),
   topic("tasks", "Tasks", "Create, follow, wait for, list, retry and purge tasks."),
-  topic("billing", "Credits and billing", "Holds, final charges, quotes, balance, usage and spend caps."),
+  topic("billing", "API balance and billing", "The separate USD API balance: holds, final charges, quotes, usage and spend caps."),
   topic("media", "Media", "Send reference files by URL or upload, and download outputs."),
   topic("assets", "Assets and LoRA files", "The private asset library and popnow://a/ URIs."),
   topic("webhooks", "Webhooks", "Receive finished tasks and verify signatures."),
@@ -28,7 +37,13 @@ export const DOC_TOPICS: readonly DocTopic[] = [
   topic("errors", "Errors", "Every business code and which ones are worth retrying."),
   topic("limits", "Rate limits", "Request limits and what happens when you exceed them."),
   topic("troubleshooting", "Troubleshooting", "Fixes for the most common problems."),
-  topic("mcp", "MCP server", "Use PopNow from ChatGPT, Claude, Cursor or VS Code."),
+  topic(
+    "mcp",
+    "Developer MCP server",
+    `Connect Claude Code, Cursor, Codex or VS Code to ${DEVELOPER_MCP_ENDPOINT} with an API key; paid calls are approved in USD.`,
+  ),
+  topic("agent-skills", "Agent skills", "Install PopNow skills for coding agents; paid steps are quoted in USD first."),
+  topic("skills", "Agent skills catalog", "Browse the skills and copy the install command for your agent.", AGENT_SKILLS_PAGE),
   topic("recipes", "Recipes", "Copy-and-run scripts for common jobs."),
   topic("api-reference", "API reference", "Every endpoint on one page."),
 ];

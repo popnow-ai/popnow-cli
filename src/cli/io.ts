@@ -4,6 +4,7 @@ import { extname } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import { MissingApiKeyError, PopNowApiError, SkillDownloadError, UploadError } from "../client/errors.js";
+import { ADD_FUNDS_URL, withoutRedundantCredits } from "../client/money.js";
 import { SkillArchiveError } from "../skills/zip.js";
 import type { ServiceStatus, TaskRecord } from "../client/types.js";
 
@@ -85,6 +86,10 @@ export function defaultCliIo(): CliIo {
   };
 }
 
+/**
+ * `--json` prints exactly what the server sent. The human-readable form shows amounts in USD and
+ * leaves out a deprecated credit field whenever the same object carries its USD counterpart.
+ */
 export function outputValue(value: unknown, json: boolean, io: CliIo): void {
   if (json) {
     io.stdout(`${JSON.stringify(value, null, 2)}\n`);
@@ -94,11 +99,12 @@ export function outputValue(value: unknown, json: boolean, io: CliIo): void {
     io.stdout(`${value}\n`);
     return;
   }
-  if (Array.isArray(value)) {
-    io.stdout(`${value.map(formatRecord).join("\n\n")}\n`);
+  const shown = withoutRedundantCredits(value);
+  if (Array.isArray(shown)) {
+    io.stdout(`${shown.map(formatRecord).join("\n\n")}\n`);
     return;
   }
-  io.stdout(`${formatRecord(value)}\n`);
+  io.stdout(`${formatRecord(shown)}\n`);
 }
 
 function formatRecord(value: unknown): string {
@@ -190,9 +196,9 @@ function describeForbidden(error: PopNowApiError): string {
 
 const ASSET_HINTS: Readonly<Record<string, string>> = {
   asset_library_locked:
-    "Next: the asset library opens after your first credit purchase. See https://popnow.ai/pricing.",
+    "Next: this account has no asset-library access yet, and adding API funds does not unlock it. `popnow assets usage` shows the plan; ask https://popnow.ai/contact if that looks wrong.",
   asset_library_full:
-    "Next: the asset library is full. Delete assets you no longer need, or unlock a larger plan with a top-up.",
+    "Next: the asset library is full. Delete assets you no longer need; `popnow assets usage` shows the limits.",
   asset_file_too_large: "Next: the file is above your plan's per-file limit for the asset library.",
   asset_daily_limit:
     "Next: the daily number of new assets is reached. It resets at 00:00 UTC (see Retry-After).",
@@ -249,7 +255,7 @@ export function describeNextStep(error: unknown, env: NodeJS.ProcessEnv): string
     case 401:
       return `Next: ${describeApiKeyState(env)} Create or rotate a key at ${CONSOLE_KEYS_URL}.`;
     case 40201:
-      return "Next: not enough credits for this task's hold. Buy credits at https://popnow.ai/pricing, then run it again.";
+      return `Next: the API balance cannot cover this task's hold. Add funds at ${ADD_FUNDS_URL} (website credits do not pay for API calls), then run it again.`;
     case 40202:
       return `Next: this key's spend cap was reached. Raise it at ${CONSOLE_KEYS_URL}, or wait for it to reset.`;
     case 403:
@@ -332,7 +338,7 @@ export async function readInputObject(
 }
 
 /**
- * Spending credits and destroying content pass through the same gate: an answer at an interactive
+ * Spending money and destroying content pass through the same gate: an answer at an interactive
  * terminal, or an explicit `--yes`.
  */
 export async function requireConfirmation(

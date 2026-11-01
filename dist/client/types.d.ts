@@ -2,10 +2,20 @@ export type TaskState = "queued" | "running" | "succeeded" | "failed" | "cancele
 export interface TaskQuote {
     quoteId: string;
     model: string;
+    /** Exact maximum USD held on acceptance. Send it back as `expectedCostUsd` to lock the price. */
+    maxChargeUsd?: string;
+    /** Exact typical USD charge, never above `maxChargeUsd`. Informational only. */
+    expectedChargeUsd?: string;
+    /** Legacy USD alias of `maxChargeUsd`. */
     estimatedCost: string;
+    /** Legacy USD alias of `maxChargeUsd`. */
     maxCharge: string;
-    maxCredits: number;
-    expectedCredits: number;
+    /** Legacy USD alias of `expectedChargeUsd`. */
+    expectedCharge?: string;
+    /** @deprecated Rounded display projection at 1 credit = $0.001. Use `maxChargeUsd`. */
+    maxCredits?: number;
+    /** @deprecated Rounded display projection at 1 credit = $0.001. Use `expectedChargeUsd`. */
+    expectedCredits?: number;
     currency: string;
     quantity: string;
     unit: string;
@@ -15,8 +25,12 @@ export interface TaskQuote {
 export interface CreatedTask {
     taskId: string;
     state: TaskState;
+    /** Exact USD held on acceptance; unused funds are released at settlement. */
+    estimatedCostUsd?: string;
+    /** Legacy USD alias of `estimatedCostUsd`. */
     estimatedCost: string;
-    estimatedCredits: number;
+    /** @deprecated Rounded display projection at 1 credit = $0.001. Use `estimatedCostUsd`. */
+    estimatedCredits?: number;
     deadlineAt: string;
     sourceTaskId?: string;
     [key: string]: unknown;
@@ -39,8 +53,14 @@ export interface TaskRecord {
     taskId: string;
     model: string;
     state: TaskState | (string & {});
+    /** Exact USD: the final charge once `settled`, otherwise the hold. */
+    costUsd?: string;
+    /** Legacy USD alias of `costUsd`. */
     cost: string;
-    credits: number;
+    /** @deprecated Rounded display projection at 1 credit = $0.001. Use `costUsd`. */
+    credits?: number;
+    /** @deprecated Unrounded credit-scale decimal string (USD x 1000). Use `costUsd`. */
+    exactCredits?: string;
     settled: boolean;
     createdAt: string;
     output?: {
@@ -109,7 +129,35 @@ export interface TaskRequest {
 }
 export interface CreateTaskRequest extends TaskRequest {
     quoteId?: string;
+    /** Exact USD hold the caller confirmed: the quote's `maxChargeUsd`. */
+    expectedCostUsd?: string;
+    /** @deprecated Legacy name for `expectedCostUsd`. */
+    expectedCost?: string;
+    /** @deprecated Integer credits (1 credit = $0.001). Send `expectedCostUsd` or `quoteId` instead. */
     expectedCredits?: number;
+}
+/** `GET /api/v1/chat/credit`: the API balance in USD. The path name is historical. */
+export interface Balance {
+    /** Exact USD that new tasks can use. May be negative on an approved credit line. */
+    availableUsd?: string;
+    /** Exact USD set aside for accepted tasks. */
+    heldUsd?: string;
+    /** Exact USD, available plus held. */
+    totalUsd?: string;
+    /** Legacy USD alias of `availableUsd`. */
+    available?: string;
+    /** Legacy USD alias of `heldUsd`. */
+    held?: string;
+    /** Legacy USD alias of `totalUsd`. */
+    total?: string;
+    /** @deprecated Truncated display projection at 1 credit = $0.001. Use `availableUsd`. */
+    availableCredits?: number;
+    /** @deprecated Rounded display projection at 1 credit = $0.001. Use `heldUsd`. */
+    heldCredits?: number;
+    /** @deprecated Display projection at 1 credit = $0.001. Use `totalUsd`. */
+    totalCredits?: number;
+    funding?: Record<string, unknown>;
+    [key: string]: unknown;
 }
 export interface ServiceStatus {
     operational: boolean;

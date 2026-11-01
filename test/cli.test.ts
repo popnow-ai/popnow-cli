@@ -9,10 +9,27 @@ import { SUPPORTED_UPLOAD_CONTENT_TYPES } from "../src/cli/io.js";
 import { CLI_VERSION } from "../src/version.js";
 import { BASE, apiError, argv, captureIo, deps, envelope, mockFetch } from "./helpers.js";
 
+/* The current response shape: exact USD strings first, deprecated credit projections alongside. */
 const QUOTE = {
   quoteId: "q_signed",
   model: "alibaba/wan-3.0/image-to-video",
-  estimatedCost: "0.034",
+  maxChargeUsd: "0.0405",
+  expectedChargeUsd: "0.0342",
+  estimatedCost: "0.0405",
+  maxCharge: "0.0405",
+  expectedCharge: "0.0342",
+  maxCredits: 41,
+  expectedCredits: 35,
+  currency: "USD",
+  quantity: "5",
+  unit: "second",
+  expiresAt: "2026-10-19T10:05:00Z",
+};
+/* What an older server sent: no USD fields beside the legacy aliases and credits. */
+const LEGACY_QUOTE = {
+  quoteId: "q_legacy",
+  model: "alibaba/wan-3.0/image-to-video",
+  estimatedCost: "0.040",
   maxCharge: "0.040",
   maxCredits: 40,
   expectedCredits: 34,
@@ -24,8 +41,9 @@ const QUOTE = {
 const CREATED = {
   taskId: "job_1",
   state: "queued",
-  estimatedCost: "0.040",
-  estimatedCredits: 40,
+  estimatedCostUsd: "0.0405",
+  estimatedCost: "0.0405",
+  estimatedCredits: 41,
   deadlineAt: "2026-10-19T11:00:00Z",
 };
 const INPUT = '{"image_url":"https://example.com/a.png","prompt":"waves"}';
@@ -35,8 +53,10 @@ function task(state: string, extra: Record<string, unknown> = {}) {
     taskId: "job_1",
     model: QUOTE.model,
     state,
-    cost: "0.034",
-    credits: 34,
+    costUsd: "0.0342",
+    cost: "0.0342",
+    credits: 35,
+    exactCredits: "34.2",
     settled: state !== "queued" && state !== "running",
     createdAt: "2026-10-19T10:00:00Z",
     ...extra,
@@ -99,12 +119,13 @@ describe("authentication", () => {
 
   it("sends the key as a Bearer token with an explicit User-Agent", async () => {
     const c = captureIo();
-    const m = mockFetch([() => envelope({ availableCredits: 1200, available: "12.00" })]);
+    const m = mockFetch([() => envelope({ availableUsd: "12.000000001", availableCredits: 12000 })]);
     expect(await runCli(argv("--json", "balance"), deps(c.io, m.fetch))).toBe(0);
     expect(m.requests[0]!.url).toBe(`${BASE}/api/v1/chat/credit`);
     expect(m.requests[0]!.headers.authorization).toBe("Bearer sk-popnow-test");
     expect(m.requests[0]!.headers["user-agent"]).toMatch(/^popnow-cli\/\d+\.\d+\.\d+ \(/);
-    expect(JSON.parse(c.out())).toEqual({ availableCredits: 1200, available: "12.00" });
+    // --json passes the server's data through untouched, legacy fields included.
+    expect(JSON.parse(c.out())).toEqual({ availableUsd: "12.000000001", availableCredits: 12000 });
   });
 
   it("explains a 401 and checks the key prefix without printing the key", async () => {
@@ -224,18 +245,53 @@ describe("jobs create", () => {
     expect(quote!.url).toBe(`${BASE}/api/v1/jobs/quote`);
     expect(JSON.parse(quote!.body!)).toEqual({ model: QUOTE.model, input: JSON.parse(INPUT) });
     expect(create!.url).toBe(`${BASE}/api/v1/jobs/createTask`);
+    // The hold is confirmed with the quote's exact USD maximum, never the rounded credits.
     expect(JSON.parse(create!.body!)).toEqual({
       model: QUOTE.model,
       input: JSON.parse(INPUT),
       quoteId: "q_signed",
-      expectedCredits: 40,
+      expectedCostUsd: "0.0405",
     });
     const key = create!.headers["idempotency-key"];
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
     expect(create!.headers["x-popnow-retention"]).toBe("3600");
     expect(JSON.parse(c.out())).toEqual({ idempotencyKey: key, ...CREATED });
-    expect(c.err()).toContain("Price: 34 credits (USD 0.034); at most 40 credits (USD 0.040)");
+    expect(c.err()).toContain("Price: $0.0342 expected; at most $0.0405 is held from your API balance");
+    expect(c.err()).not.toContain("credits");
     expect(c.err()).toContain(`Idempotency-Key: ${key}`);
+  });
+
+  it("still confirms a quote from a server that sends only the legacy fields", async () => {
+    const c = captureIo();
+    const m = mockFetch([() => envelope(LEGACY_QUOTE), () => envelope(CREATED, { status: 202 })]);
+    expect(
+      await runCli(argv("jobs", "create", "--model", QUOTE.model, "--input-json", INPUT, "--yes"), deps(c.io, m.fetch)),
+    ).toBe(0);
+    expect(JSON.parse(m.requests[1]!.body!)).toMatchObject({ quoteId: "q_legacy", expectedCostUsd: "0.040" });
+    expect(c.err()).toContain("Price: $0.034 expected; at most $0.040 is held");
+  });
+
+  it("falls back to expectedCredits only when a quote carries no USD amount at all", async () => {
+    const c = captureIo();
+    const { estimatedCost: _e, maxCharge: _m, ...creditsOnly } = LEGACY_QUOTE;
+    const m = mockFetch([() => envelope(creditsOnly), () => envelope(CREATED, { status: 202 })]);
+    expect(
+      await runCli(argv("jobs", "create", "--model", QUOTE.model, "--input-json", INPUT, "--yes"), deps(c.io, m.fetch)),
+    ).toBe(0);
+    const body = JSON.parse(m.requests[1]!.body!);
+    expect(body).toMatchObject({ quoteId: "q_legacy", expectedCredits: 40 });
+    expect(body.expectedCostUsd).toBeUndefined();
+    expect(c.err()).toContain("at most $0.04 is held");
+  });
+
+  it("prints a quote in USD and hides the deprecated credit fields outside --json", async () => {
+    const c = captureIo();
+    const m = mockFetch([() => envelope(QUOTE)]);
+    expect(await runCli(argv("jobs", "quote", "--model", QUOTE.model, "--input-json", INPUT), deps(c.io, m.fetch))).toBe(0);
+    expect(c.out()).toContain("maxChargeUsd: 0.0405");
+    expect(c.out()).toContain("Price: $0.0342 expected; at most $0.0405 is held");
+    expect(c.out()).not.toContain("maxCredits");
+    expect(c.out()).not.toContain("expectedCredits");
   });
 
   it("shows the quote and stops when the interactive answer is no", async () => {
@@ -247,7 +303,7 @@ describe("jobs create", () => {
     );
     expect(code).toBe(1);
     expect(m.requests).toHaveLength(1);
-    expect(c.confirmations[0]).toContain("34 credits");
+    expect(c.confirmations[0]).toContain("at most $0.0405");
     expect(c.err()).toContain("operation canceled");
   });
 
@@ -313,11 +369,92 @@ describe("jobs create", () => {
     expect(details).toMatchObject({ taskId: "job_1", idempotencyKey: "k-1", recover: "popnow jobs wait job_1" });
   });
 
-  it("maps 40201 to a top-up hint", async () => {
+  it("maps 40201 to the API billing page", async () => {
     const c = captureIo();
     const m = mockFetch([() => apiError(402, 40201, "Insufficient balance")]);
     expect(await runCli(argv("jobs", "quote", "--model", QUOTE.model, "--input-json", INPUT), deps(c.io, m.fetch))).toBe(1);
-    expect(c.err()).toContain("https://popnow.ai/pricing");
+    expect(c.err()).toContain("Add funds at https://popnow.ai/api/console/billing");
+    expect(c.err()).not.toContain("popnow.ai/pricing");
+  });
+});
+
+describe("balance and costs in USD", () => {
+  it("shows the API balance in exact USD with where to add funds", async () => {
+    const c = captureIo();
+    const m = mockFetch([
+      () =>
+        envelope({
+          availableUsd: "12.345678901",
+          heldUsd: "0.0405",
+          totalUsd: "12.386178901",
+          available: "12.345678901",
+          held: "0.0405",
+          total: "12.386178901",
+          availableCredits: 12345,
+          heldCredits: 41,
+          totalCredits: 12386,
+        }),
+    ]);
+    expect(await runCli(argv("balance"), deps(c.io, m.fetch))).toBe(0);
+    expect(c.out()).toContain("Available: $12.345678901\nHeld: $0.0405\nTotal: $12.386178901\n");
+    expect(c.out()).toContain("Add funds: https://popnow.ai/api/console/billing");
+    expect(c.out()).not.toContain("Credits");
+  });
+
+  it("reads the legacy credit balance when no USD field is present", async () => {
+    const c = captureIo();
+    const m = mockFetch([() => envelope({ availableCredits: 0, heldCredits: 1205, totalCredits: 1205 })]);
+    expect(await runCli(argv("balance"), deps(c.io, m.fetch))).toBe(0);
+    expect(c.out()).toContain("Available: $0\nHeld: $1.205\nTotal: $1.205\n");
+    expect(c.out()).toContain("Nothing is available for new tasks.");
+  });
+
+  it("shows a negative balance with the sign before the currency", async () => {
+    const c = captureIo();
+    const m = mockFetch([() => envelope({ availableUsd: "-1.5", heldUsd: "0", totalUsd: "-1.5" })]);
+    expect(await runCli(argv("balance"), deps(c.io, m.fetch))).toBe(0);
+    expect(c.out()).toContain("Available: -$1.5");
+  });
+
+  it("prints a settled task's charge, and a running task's hold, in USD", async () => {
+    const settled = captureIo();
+    await runCli(argv("jobs", "get", "job_1"), deps(settled.io, mockFetch([() => envelope(task("succeeded"))]).fetch));
+    expect(settled.out()).toContain("Charged: $0.0342");
+    expect(settled.out()).not.toContain("exactCredits");
+
+    const running = captureIo();
+    await runCli(argv("jobs", "get", "job_1"), deps(running.io, mockFetch([() => envelope(task("running"))]).fetch));
+    expect(running.out()).toContain("Held: $0.0342 (the final charge is at most this");
+  });
+
+  it("still prints the cost of a legacy task record that has only credits", async () => {
+    const c = captureIo();
+    const legacy = { taskId: "job_1", model: QUOTE.model, state: "succeeded", credits: 34, settled: true, createdAt: "2026-10-19T10:00:00Z" };
+    await runCli(argv("jobs", "get", "job_1"), deps(c.io, mockFetch([() => envelope(legacy)]).fetch));
+    expect(c.out()).toContain("credits: 34");
+    expect(c.out()).toContain("Charged: $0.034");
+  });
+
+  it("hides the deprecated credit totals of usage outside --json", async () => {
+    const usage = {
+      from: "2026-10-01",
+      to: "2026-10-08",
+      currency: "USD",
+      totalCalls: 2,
+      totalSpend: "0.0684",
+      totalCredits: 69,
+      days: [{ day: "2026-10-01", calls: 2, succeeded: 2, failed: 0, spend: "0.0684", credits: 69 }],
+      models: [{ model: QUOTE.model, calls: 2, succeeded: 2, failed: 0, spend: "0.0684", credits: 69 }],
+    };
+    const c = captureIo();
+    expect(await runCli(argv("usage"), deps(c.io, mockFetch([() => envelope(usage)]).fetch))).toBe(0);
+    expect(c.out()).toContain("totalSpend: 0.0684");
+    expect(c.out()).not.toContain("credits");
+    expect(c.out()).not.toContain("totalCredits");
+
+    const j = captureIo();
+    expect(await runCli(argv("--json", "usage"), deps(j.io, mockFetch([() => envelope(usage)]).fetch))).toBe(0);
+    expect(JSON.parse(j.out())).toEqual(usage);
   });
 });
 
@@ -368,7 +505,7 @@ describe("retries", () => {
     const c = captureIo();
     const m = mockFetch([
       () => apiError(429, 429, "Too many requests", {}, { "Retry-After": "1" }),
-      () => envelope({ availableCredits: 5 }),
+      () => envelope({ availableUsd: "0.005" }),
     ]);
     expect(await runCli(argv("--json", "balance"), deps(c.io, m.fetch, 2))).toBe(0);
     expect(m.requests).toHaveLength(2);
@@ -458,6 +595,9 @@ describe("docs", () => {
     expect(m.requests).toHaveLength(0);
     expect(c.out()).toContain("https://popnow.ai/docs/webhooks");
     expect(c.out()).toContain("https://popnow.ai/docs/openapi.yaml");
+    expect(c.out()).toContain("Developer MCP: https://api.popnow.ai/api/v1/mcp (setup: https://popnow.ai/api/mcp)");
+    expect(c.out()).toContain("Agent skills: https://popnow.ai/api/skills");
+    expect(c.out()).not.toMatch(/popnow\.ai\/mcp\b/);
   });
 
   it("prints the link instead of opening a browser when there is no terminal", async () => {

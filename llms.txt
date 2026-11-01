@@ -11,9 +11,9 @@
 
 - `popnow status` - checks `GET /healthz`; no key.
 - `popnow models list [--modality image|video|audio] [--provider] [--task] [--search] [--include-schema]`, `popnow models get <model>` - `GET /api/v1/models[/{model}]`.
-- `popnow balance` - `GET /api/v1/chat/credit` (credits; 1 credit = $0.001). `popnow usage [--from --to]` - `GET /api/v1/usage`.
-- `popnow jobs quote --model <id> --input-json '<json>'` - `POST /api/v1/jobs/quote`, nothing is held.
-- `popnow jobs create --model <id> --input-json|--input-file <...> [--callback-url] [--idempotency-key] [--retention 1h] [--yes] [--wait]` - quotes, shows the price, asks to confirm, then `POST /api/v1/jobs/createTask` with `quoteId`, `expectedCredits` and an automatic `Idempotency-Key`; `--wait` polls `GET /api/v1/jobs/recordInfo`.
+- `popnow balance` - `GET /api/v1/chat/credit`: the API balance in exact USD (`availableUsd`, `heldUsd`, `totalUsd`). `popnow usage [--from --to]` - `GET /api/v1/usage` (`totalSpend`, USD).
+- `popnow jobs quote --model <id> --input-json '<json>'` - `POST /api/v1/jobs/quote` (`maxChargeUsd`, `expectedChargeUsd`), nothing is held.
+- `popnow jobs create --model <id> --input-json|--input-file <...> [--callback-url] [--idempotency-key] [--retention 1h] [--yes] [--wait]` - quotes, shows the USD price, asks to confirm, then `POST /api/v1/jobs/createTask` with `quoteId`, `expectedCostUsd` (the quote's `maxChargeUsd`) and an automatic `Idempotency-Key`; `--wait` polls `GET /api/v1/jobs/recordInfo` (`costUsd`).
 - `popnow jobs list|get|wait|retry|purge` - `GET /api/v1/jobs`, `recordInfo`, polling, `POST /api/v1/jobs/retry`, `POST /api/v1/jobs/purge`.
 - `popnow files upload <path>` - upload-url, presigned PUT, commit; prints a `popnow://f/...` URI. `popnow files download-url <task-id>`.
 - `popnow assets list|get|usage` - the private asset library (`popnow://a/...` URIs).
@@ -28,10 +28,12 @@
 
 - Model IDs look like `<maker>/<model>/<task>`, e.g. `alibaba/z-image-turbo/text-to-image`, `alibaba/wan-3.0/image-to-video`.
 - Responses use the envelope `{code,msg,data,request_id}`; errors print a `Next:` hint per business code.
-- Task states: queued, running, succeeded, failed, expired. Failed tasks are refunded. Output links last about 20 minutes.
+- Billing: the API has its own USD balance, separate from website credits; add funds at https://popnow.ai/api/console/billing. USD amounts are exact decimal strings (up to nine decimals). Credit fields (`maxCredits`, `credits`, `availableCredits`, ...) are deprecated display projections.
+- Task states: queued, running, succeeded, failed, expired. Failed tasks release their hold. Output links last about 20 minutes.
 - Skill folders: Claude Code `~/.claude/skills` (`.claude/skills`), Codex `~/.agents/skills` (`.agents/skills`), Cursor `~/.cursor/skills` (`.cursor/skills`), Gemini CLI `~/.gemini/skills` (`.gemini/skills`), GitHub Copilot `~/.copilot/skills` (`.github/skills`), OpenCode `~/.config/opencode/skills` (`.opencode/skills`).
 
 ## Links
 
-- Docs: https://popnow.ai/docs · OpenAPI: https://popnow.ai/docs/openapi.yaml · MCP: https://popnow.ai/mcp · https://popnow.ai/llms.txt
-- Repositories: https://github.com/popnow-ai (popnow-mcp, popnow-skills, popnow-python, popnow-js, popnow-api, popnow-blender, popnow-comfyui, n8n-nodes-popnow, popnow-go, popnow-php)
+- Docs: https://popnow.ai/docs · OpenAPI: https://popnow.ai/docs/openapi.yaml · https://popnow.ai/llms.txt
+- Developer MCP: https://api.popnow.ai/api/v1/mcp (setup https://popnow.ai/api/mcp) · Agent skills: https://popnow.ai/api/skills · API pricing: https://popnow.ai/api/pricing
+- Repositories: https://github.com/popnow-ai (popnow-api-mcp, popnow-skills, popnow-python, popnow-js, popnow-api, popnow-blender, popnow-comfyui, n8n-nodes-popnow, popnow-go, popnow-php)

@@ -1,11 +1,12 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { AGENT_SKILLS_PAGE } from "../client/docs.js";
 import { MissingApiKeyError } from "../client/errors.js";
 import { AGENT_IDS, describeInvocation, detectAgents, requireAgent, skillsDirectory, } from "../skills/agents.js";
 import { findInstalledSkills, folderCandidates, installSkillArchive, removeSkillFolder, skillFolderName, skillLocations, validateSlug, } from "../skills/install.js";
 import { outputValue, requireConfirmation } from "./io.js";
-const CREDITS_NOTE = "PopNow skills quote the price in credits before any paid generation and wait for your OK. " +
-    "They read POPNOW_API_KEY from the environment the agent runs in.";
+const PRICE_NOTE = "PopNow skills quote the price in USD before any paid generation and wait for your OK; it is paid " +
+    "from your API balance. They read POPNOW_API_KEY from the environment the agent runs in.";
 /** The catalog may answer with a bare array or wrap it; both are accepted. */
 export function skillList(data) {
     const raw = Array.isArray(data)
@@ -158,7 +159,7 @@ export function registerSkillsCommands(program, context) {
             if (skill.summary)
                 io.stdout(`${" ".repeat(width)}  ${skill.summary}\n`);
         }
-        io.stdout("\nDetails: popnow skills info <slug>    Install: popnow skills add <slug>\n");
+        io.stdout(`\nDetails: popnow skills info <slug>    Install: popnow skills add <slug>\nBrowse the catalog: ${AGENT_SKILLS_PAGE}\n`);
     });
     skills
         .command("info")
@@ -263,7 +264,7 @@ export function registerSkillsCommands(program, context) {
                 outputValue(results, true, io);
         }
         if (!json()) {
-            io.stdout(`\n${CREDITS_NOTE}\nIf the agent was already running, start a new session if the skill does not show up.\n`);
+            io.stdout(`\n${PRICE_NOTE}\nIf the agent was already running, start a new session if the skill does not show up.\n`);
         }
     });
     skills

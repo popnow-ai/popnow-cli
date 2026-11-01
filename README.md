@@ -25,9 +25,11 @@
 </p>
 
 PopNow is a browser-based AI studio for videos, images and music: image-to-video, text-to-video, AI images,
-music and speech, one-tap trending video effects and image styles. The CLI talks to the same models, prices
-and credit wallet as [popnow.ai](https://popnow.ai). Every billable command shows the price in credits first
-and asks before it spends anything; failed runs are refunded automatically.
+music and speech, one-tap trending video effects and image styles. The CLI calls the same models through the
+PopNow API, which bills in exact USD from its own API balance: fund it at
+[popnow.ai/api/console/billing](https://popnow.ai/api/console/billing). Website credits do not pay for API
+calls. Every billable command shows the price in USD first and asks before it spends anything; failed runs
+release their hold automatically.
 
 ## Quickstart
 
@@ -45,7 +47,7 @@ from the environment only, never from a command-line argument, so it does not en
 
 ```bash
 export POPNOW_API_KEY="sk-popnow-..."      # PowerShell: $env:POPNOW_API_KEY = "sk-popnow-..."
-popnow balance
+popnow balance         # API balance in USD; add funds at https://popnow.ai/api/console/billing
 ```
 
 **3. Generate.** The CLI quotes the request, shows the price, asks for confirmation, creates the task with an
@@ -63,10 +65,10 @@ popnow jobs create \
 | Command | What it does | Key needed |
 | --- | --- | --- |
 | `popnow status` | Checks that `api.popnow.ai` answers, in one sentence | No |
-| `popnow models list` / `models get <model>` | Live model catalog with credit prices and input JSON Schemas | Yes |
-| `popnow balance` | Available, held and total credits (1 credit = $0.001) | Yes |
-| `popnow usage` | Settled usage for the current key, by day and model | Yes |
-| `popnow jobs quote` | Prices a request without creating a task or holding credits | Yes |
+| `popnow models list` / `models get <model>` | Live model catalog with USD prices and input JSON Schemas | Yes |
+| `popnow balance` | API balance in exact USD: available, held and total | Yes |
+| `popnow usage` | Settled USD spend for the current key, by day and model | Yes |
+| `popnow jobs quote` | Prices a request in USD without creating a task or holding funds | Yes |
 | `popnow jobs create` | Quote, confirm, create; `--wait` polls until the task is final | Yes |
 | `popnow jobs list` / `get` / `wait` | Task history, one task's state and outputs, wait for completion | Yes |
 | `popnow jobs retry` | New task from a failed or expired one | Yes |
@@ -83,12 +85,17 @@ popnow jobs create \
 Design choices that matter in scripts:
 
 - **The key comes from `POPNOW_API_KEY` only.** There is no `--api-key` flag.
-- **Billable and destructive commands ask first.** `jobs create` shows the quote (`expectedCredits` and the
-  `maxCredits` hold), `jobs retry` and `jobs purge` ask too. Without a terminal they refuse unless you pass `--yes`.
+- **Billable and destructive commands ask first.** `jobs create` shows the quote in USD (`expectedChargeUsd` and
+  the `maxChargeUsd` hold), `jobs retry` and `jobs purge` ask too. Without a terminal they refuse unless you pass
+  `--yes`.
 - **Every create and retry carries an `Idempotency-Key`**, generated when you do not pass `--idempotency-key`,
   and printed to stderr. Replaying the same key returns the original task instead of charging twice.
-- **The quoted price is locked in**: `jobs create` sends `quoteId` and `expectedCredits`, so a price change
-  between quote and create is refused (`40901`) instead of charged.
+- **The quoted price is locked in**: `jobs create` sends `quoteId` and `expectedCostUsd` (the quote's exact
+  `maxChargeUsd`), so a price change between quote and create is refused (`40901`) instead of charged.
+- **Money stays exact.** USD amounts are decimal strings with up to nine decimal places; the CLI prints them as
+  the server sent them and never rounds through floating point. Outside `--json`, the deprecated credit fields
+  (`maxCredits`, `credits`, `availableCredits` and so on) are left out whenever the USD field is present;
+  `--json` still passes every field through for older scripts.
 - **`--json` on any command** prints the `data` of the API response on stdout (create and retry add the
   `idempotencyKey`); errors go to stderr as one JSON object. Progress lines (price, idempotency key, accepted task id) always go to stderr.
 - **Every error ends with a `Next:` line** that says what to do for that business code (wrong key prefix, top-up,
@@ -235,8 +242,13 @@ Several agents also read `~/.agents/skills`. On Windows `~` is your user profile
   folder and moved into place in one step, so the agent never sees half a skill.
 - **The key stays with the API.** The download endpoint redirects to a short-lived signed link; the CLI follows it
   without the `Authorization` header.
-- **Credits.** The skills quote the price in credits before any paid generation and wait for your OK, and they
-  read `POPNOW_API_KEY` from the environment the agent runs in.
+- **Prices.** The skills quote the price in USD before any paid generation and wait for your OK; generation is
+  paid from your API balance. They read `POPNOW_API_KEY` from the environment the agent runs in.
+- **Browse first** at [popnow.ai/api/skills](https://popnow.ai/api/skills), which lists every skill with its
+  install command per agent.
+
+Prefer MCP? The developer MCP server at `https://api.popnow.ai/api/v1/mcp` gives Claude Code, Cursor, Codex or
+VS Code the same tools with your API key. Setup: [popnow.ai/api/mcp](https://popnow.ai/api/mcp).
 
 ## FAQ
 
@@ -248,9 +260,11 @@ Install the CLI, export `POPNOW_API_KEY`, then run `popnow jobs create --model a
 
 ### How much does a generation cost, and can I see the price before I pay?
 
-Every model has a price in credits (1 credit = $0.001), listed by `popnow models list`. `popnow jobs quote`
-prices the exact request without holding anything, and `popnow jobs create` always shows that quote and asks
-before it creates the task. Failed tasks release their hold, so they cost nothing.
+Every model has a USD price, listed by `popnow models list` and at
+[popnow.ai/api/pricing](https://popnow.ai/api/pricing). `popnow jobs quote` prices the exact request without
+holding anything, and `popnow jobs create` always shows that quote in USD and asks before it creates the task.
+Failed tasks release their hold, so they cost nothing. API calls are paid from the API balance, which is
+separate from website credits; add funds at [popnow.ai/api/console/billing](https://popnow.ai/api/console/billing).
 
 ### How do I use the PopNow CLI in CI or a shell script without a prompt?
 
@@ -298,15 +312,16 @@ node dist/cli/index.js --help
 `dist/` is committed on purpose: installing from GitHub then needs no build step (npm does not install
 devDependencies for a global git install). Rebuild and commit it with every source change; CI checks that it
 matches. Tests use a mocked `fetch` and never call the live API. `POPNOW_LIVE_TESTS=1 npm test` adds two live checks
-that use a fake key and cannot spend credits.
+that use a fake key and cannot spend money.
 
 ## Links
 
-- Website: [popnow.ai](https://popnow.ai) · Pricing: [popnow.ai/pricing](https://popnow.ai/pricing)
+- Website: [popnow.ai](https://popnow.ai) · API pricing: [popnow.ai/api/pricing](https://popnow.ai/api/pricing) · Add funds: [popnow.ai/api/console/billing](https://popnow.ai/api/console/billing)
 - Docs: [popnow.ai/docs](https://popnow.ai/docs) · API reference: [popnow.ai/docs/openapi](https://popnow.ai/docs/openapi) ([openapi.yaml](https://popnow.ai/docs/openapi.yaml)) · [llms.txt](https://popnow.ai/llms.txt)
-- MCP server for AI assistants: [popnow.ai/mcp](https://popnow.ai/mcp)
+- Developer MCP server (API key, USD): `https://api.popnow.ai/api/v1/mcp` · setup at [popnow.ai/api/mcp](https://popnow.ai/api/mcp)
+- Agent skills: [popnow.ai/api/skills](https://popnow.ai/api/skills)
 - Other PopNow repositories:
-  [popnow-mcp](https://github.com/popnow-ai/popnow-mcp) ·
+  [popnow-api-mcp](https://github.com/popnow-ai/popnow-api-mcp) ·
   [popnow-skills](https://github.com/popnow-ai/popnow-skills) ·
   [popnow-python](https://github.com/popnow-ai/popnow-python) ·
   [popnow-js](https://github.com/popnow-ai/popnow-js) ·

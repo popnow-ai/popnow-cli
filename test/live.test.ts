@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PopNowClient } from "../src/client/client.js";
 import { PopNowApiError } from "../src/client/errors.js";
 
-// Opt-in: POPNOW_LIVE_TESTS=1 npm test. Uses a fake key, so it can never spend credits.
+// Opt-in: POPNOW_LIVE_TESTS=1 npm test. Uses a fake key, so it can never spend money.
 describe.skipIf(process.env.POPNOW_LIVE_TESTS !== "1")("live API", () => {
   it("answers /healthz without a key", async () => {
     expect((await new PopNowClient().getStatus()).operational).toBe(true);

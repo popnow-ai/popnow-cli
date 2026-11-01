@@ -14,7 +14,9 @@ Guidelines:
 - Follow the public API contract at [popnow.ai/docs/openapi.yaml](https://popnow.ai/docs/openapi.yaml). Do not
   add endpoints or fields that are not documented there.
 - Keep the API key out of arguments: it is read from `POPNOW_API_KEY` only.
-- Anything that spends credits or deletes content must ask first, and accept `--yes` for scripts.
+- Anything that spends from the API balance or deletes content must ask first, and accept `--yes` for scripts.
+- Money is exact USD decimal strings: never parse an amount into a float, and read a deprecated credit field
+  only when its USD field is missing.
 - Keep runtime dependencies to `commander`.
 - All text in the repository is English; a test fails on CJK characters.
 
