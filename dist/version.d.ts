@@ -1,2 +1,2 @@
 /** Kept in step with package.json; a test fails when the two disagree. */
-export declare const CLI_VERSION = "0.2.0";
+export declare const CLI_VERSION = "0.3.0";

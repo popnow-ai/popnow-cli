@@ -211,6 +211,9 @@ function describeOutputs(task: TaskRecord): string[] {
         : `Held: ${formatUsd(cost)} (the final charge is at most this; unused funds are released)`,
     );
   }
+  if (task.output?.text !== undefined) lines.push(`Text: ${task.output.text}`);
+  const vectors = task.output?.embeddings;
+  if (vectors) lines.push(`Embeddings: ${vectors.data.length} vectors, ${vectors.data[0]?.embedding.length ?? 0} dimensions; ${vectors.inputTokens} input tokens. Use --json for vector values.`);
   for (const asset of task.output?.assets ?? []) {
     if (asset.url) lines.push(`Output: ${asset.url}${asset.expiresAt ? ` (link expires ${asset.expiresAt})` : ""}`);
   }
