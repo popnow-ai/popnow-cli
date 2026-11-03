@@ -1,6 +1,6 @@
 {
   "name": "@popnow/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Official command-line client for the PopNow API: generate AI video, images, music and speech from your terminal or CI.",
   "type": "module",
   "license": "MIT",
