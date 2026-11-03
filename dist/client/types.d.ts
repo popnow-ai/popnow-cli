@@ -65,6 +65,14 @@ export interface TaskRecord {
     createdAt: string;
     output?: {
         text?: string;
+        transcript?: Record<string, unknown>;
+        embeddings?: {
+            data: {
+                index: number;
+                embedding: number[];
+            }[];
+            inputTokens: number;
+        };
         assets?: TaskOutputAsset[];
         [key: string]: unknown;
     };
