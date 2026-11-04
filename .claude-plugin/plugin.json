@@ -1,0 +1,26 @@
+{
+  "name": "popnow-cli",
+  "version": "1.0.0",
+  "description": "Teaches Claude Code to drive the PopNow CLI: find models and input schemas, quote the exact USD price, create image, video, music and speech jobs, upload reference files, wait for results and verify webhooks from the terminal or CI.",
+  "author": {
+    "name": "PopNow",
+    "email": "support@popnow.ai",
+    "url": "https://popnow.ai"
+  },
+  "homepage": "https://popnow.ai/docs",
+  "repository": "https://github.com/popnow-ai/popnow-cli",
+  "license": "MIT",
+  "keywords": [
+    "cli",
+    "terminal",
+    "ci",
+    "developer-tools",
+    "popnow",
+    "ai-video",
+    "ai-image",
+    "ai-music",
+    "text-to-speech",
+    "text-to-video",
+    "image-to-video"
+  ]
+}
