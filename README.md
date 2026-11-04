@@ -250,6 +250,13 @@ Several agents also read `~/.agents/skills`. On Windows `~` is your user profile
 Prefer MCP? The developer MCP server at `https://api.popnow.ai/api/v1/mcp` gives Claude Code, Cursor, Codex or
 VS Code the same tools with your API key. Setup: [popnow.ai/api/mcp](https://popnow.ai/api/mcp).
 
+## Claude Code plugin
+
+```text
+/plugin marketplace add popnow-ai/popnow-cli
+/plugin install popnow-cli@popnow-cli
+```
+
 ## FAQ
 
 ### How do I generate a video from an image with a command-line tool?
